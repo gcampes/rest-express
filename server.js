@@ -1,69 +1,200 @@
 var express = require('express');
 var mongoose = require('mongoose');
-var bodyParser = require('body-parser')
+var bodyParser = require('body-parser');
 
 var app = express();
 
 app.use(bodyParser());
 
 app.use(function(req, res, next) {
-    res.setHeader('Access-Control-Allow-Origin', 'http://localhost:4200');
-  	res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-  	res.header('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE, OPTIONS');
-    next();
+  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:4200');
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  res.header('Access-Control-Allow-Methods', 'POST, GET, PATCH, DELETE, OPTIONS');
+  next();
 });
 
-mongoose.connect('mongodb://localhost/Orbit');
+mongoose.connect('mongodb://localhost/magic-crud');
 
-var PersonSchema = new mongoose.Schema({
-	name: 'string',
-	age: 'string',
+var Country = mongoose.model('Country', require('./models/country'));
+var City = mongoose.model('City', require('./models/city'));
+var Counter = require('./models/counter');
+
+var db = mongoose.connection;
+db.on('error', console.error.bind(console, 'connection error:'));
+db.once('open', function() {
+  Counter.find({
+    _id: 'caseid'
+  }, function(err, counter) {
+    if (counter.length === 0) {
+      counter = new Counter({
+        _id: 'caseid',
+        seq: 1
+      });
+      counter.save();
+    }
+  });
 });
 
-var PersonModel = mongoose.model('person', PersonSchema);
-
-app.get('/api/people', function(req,res) {
-	PersonModel.find({},function(err,docs) {
-		if(err) {
-			res.send({error:err});
-		}
-		else {
-			res.send({person:docs});
-		}
-	});
+app.get('/api/countries', function(req, res) {
+  Country.find({}, function(err, docs) {
+    var data = docs.map(function(d, index) {
+      return {
+        id: d.id,
+        attributes: {
+          active: d.active,
+          name: d.name,
+          description: d.description,
+          created: d.created
+        },
+        type: "countries"
+      };
+    });
+    if (err) {
+      res.send({
+        error: err
+      });
+    } else {
+      res.send({
+        data: data
+      });
+    }
+  });
 });
 
-app.post('/api/people', function(req, res) {
-  var person = new PersonModel({
-    name: req.body.person.name,
-    age: req.body.person.age
+app.get('/api/cities', function(req, res) {
+  City.find({}, function(err, docs) {
+    var data = docs.map(function(d, index) {
+      return {
+        id: d.id,
+        attributes: {
+          active: d.active,
+          name: d.name,
+          description: d.description,
+          country: d.country,
+          created: d.created
+        },
+        type: "countries"
+      };
+    });
+    if (err) {
+      res.send({
+        error: err
+      });
+    } else {
+      res.send({
+        data: data
+      });
+    }
+  });
+});
+
+app.get('/api/countries/:id', function(req, res) {
+  Country.findOne({
+    'id': req.params.id
+  }).exec(function(err, country) {
+    var data = {
+      links: {
+        self: 'http://localhost:3000/api/countries/' + country.id
+      },
+      id: country.id,
+      attributes: {
+        name: country.name,
+        description: country.description,
+        created: country.created
+      },
+      type: "countries"
+    };
+    if (err) {
+      res.send({
+        error: err
+      });
+    } else {
+      res.send({
+        data: data
+      });
+    }
+  });
+});
+
+app.post('/api/countries', function(req, res) {
+  var country = new Country({
+    active: req.body.data.attributes.active,
+    name: req.body.data.attributes.name,
+    description: req.body.data.attributes.description
   });
 
-  person.save(function(err, person){
-    if(err){
+  country.save(function(err, c) {
+    if (err) {
       console.log(err);
-    }
-    else{
-      res.end(JSON.stringify(person));
+    } else {
+      console.log('abc', c);
+      var data = {
+        links: {
+          self: 'http://localhost:3000/api/countries/' + c.id
+        },
+        id: c.id,
+        attributes: {
+          active: c.active,
+          name: c.name,
+          description: c.description,
+          created: c.created
+        },
+        type: "countries"
+      };
+      // console.log(data);
+      res.status(201)
+        .header('Location', ('http://localhost:3000/api/countries/' + c.id))
+        .send({
+          data: data
+        });
     }
   });
 });
 
-app.put('/api/people/:id', function(req, res){
-  var person = new PersonModel({
-    _id: req.query.id,
-    name: req.body.person.name,
-    age: req.body.person.age
-  });
-
-  PersonModel.update(person, function(err, person){
-    if(err){
+app.patch('/api/countries/:id', function(req, res) {
+  Country.findOne({
+    id: req.params.id
+  }, function(err, country) {
+    if (err) {
       console.log(err);
+    } else {
+      country.active = req.body.data.attributes.active;
+      country.name = req.body.data.attributes.name;
+      country.description = req.body.data.attributes.description;
+      country.save();
+
+      var data = {
+        links: {
+          self: 'http://localhost:3000/api/countries/' + country.id
+        },
+        id: country.id,
+        attributes: {
+          active: country.active,
+          name: country.name,
+          description: country.description,
+          created: country.created
+        },
+        type: "countries"
+      };
+      res
+        .status(200)
+        .send({
+          data: data
+        });
     }
-    else{
-      res.end(JSON.stringify(person));
+  });
+});
+
+app.delete('/api/countries/:id', function(req, res) {
+  Country.findOneAndRemove({
+    'id': req.params.id
+  }).exec(function(err, country) {
+    if (err) {
+      console.log(err);
+    } else {
+      res.status(204).end();
     }
-  })
-})
+  });
+});
 
 app.listen('3000');
